@@ -1,0 +1,105 @@
+# goals.yaml: single source of truth for the coach. Edit by hand.
+# Values marked "TODO" need your input; "TODO confirm" were pre-filled from Garmin.
+# Dates are YYYY-MM-DD. Paces are min:sec per km. HR in bpm.
+
+athlete:
+  name: Ciprian
+  timezone: Europe/Berlin
+
+# Races. priority: A = goal race, B = important tune-up, C = training race.
+# Races on your Garmin calendar are merged in automatically on sync;
+# anything here wins if the same race appears in both.
+races:
+  - name: Vienna Marathon
+    date: 2027-04-18
+    distance_km: 42.195
+    priority: A
+    goal_time: "2:45:00"        # = 3:54.6/km
+  # - name: Example Half
+  #   date: 2027-03-07
+  #   distance_km: 21.0975
+  #   priority: B
+  #   goal_time: "1:17:00"
+
+volume:
+  current_weekly_km: [60, 70]
+  target_weekly_km: 100
+  target_by: 2026-12-28         # 100 km/week, consistently, built easy
+  rest_days_per_week: [0, 1]    # 6-7 running days
+  doubles: true
+
+phases:
+  - name: base
+    start: 2026-10-19
+    end: 2026-12-27
+    focus: >
+      Volume and durability. Easy zone 2 running with strides, very little LT1.
+      Build mileage towards 100 km/week.
+    structure: >
+      6-7 runs/week, some doubles. All easy + strides; at most one short
+      LT1 touch per week. Long run easy, no marathon pace.
+  - name: marathon_block
+    start: 2026-12-28
+    end: 2027-04-18
+    focus: >
+      Threshold and around-threshold support first, then marathon-specific work.
+      Qualities once introduced stay; only emphasis changes.
+    structure: >
+      One hard session, one LT1 session, one long run, the rest easy with strides.
+      6-7 running days, some doubles.
+
+long_run:
+  progression:
+    - "Base: easy long runs, no marathon pace"
+    - "Specific phase: marathon-pace finishes (km or mile repeats at the end, progressions)"
+    - "Late specific: 10-15 km at or around marathon pace inside the long run"
+  fueling: "Alternate fueled and unfueled long runs; practise race-day fueling early"
+
+# Intensity buckets used for the intensity-distribution metrics.
+# HR boundaries are the LOWER bound of each bucket.
+zones:
+  max_hr: 185                   # TODO confirm: Garmin running max HR
+  lt1_hr: 152                   # TODO confirm: Garmin zone 3 floor used as LT1 for now
+  lt2_hr: 177                   # TODO confirm: Garmin lactate threshold HR
+  # Garmin running zones today: Z1 91, Z2 114, Z3 152, Z4 166, Z5 175
+  hr_buckets:
+    easy: 0                     # below steady
+    steady: 152                 # TODO confirm: LT1 and up ("grey zone" on easy days)
+    threshold: 166              # TODO confirm: approaching and around LT2
+    hard: 178                   # TODO confirm: above LT2
+  pace:                         # TODO: your pace zones
+    easy: ["4:50", "5:50"]
+    steady: ["4:15", "4:50"]
+    marathon: ["3:52", "3:57"]
+    threshold: ["3:45", "3:55"] # Garmin LT pace today: 3:53/km (TODO confirm)
+    hard: ["3:15", "3:45"]
+  threshold_power_w: 435        # TODO confirm: Garmin running FTP
+
+definitions:
+  lt1: >
+    TODO: what you mean by LT1, e.g. "aerobic threshold, ~2 mmol, HR 150-158,
+    pace ~4:20/km; conversational but focused".
+  hard_session: >
+    TODO: what counts as a hard session, e.g. "any session with 20+ min at or above
+    LT2, or VO2 max intervals; needs 48 h before the next quality day".
+
+# Rules the metrics use to label sessions. Tune to taste.
+classification:
+  long_run_min_km: 24
+  long_run_min_minutes: 105
+  strides_max_lap_s: 40          # short fast laps at the end of an easy run
+  strides_min_speed_vs_avg: 1.25 # stride lap at least 25% faster than run average
+  lt_min_share: 0.20             # >=20% of time in threshold bucket -> LT
+  hard_min_share: 0.08           # >=8% of time in hard bucket -> hard
+  grey_zone_max_steady_share: 0.15  # easy run with more steady time than this is flagged
+
+recovery_thresholds:
+  hrv_days_below_baseline: 3
+  sleep_min_hours: 7.0
+  sleep_score_poor: 60
+  rhr_elevated_bpm: 5
+  pain_keywords: [pain, hurt, sore, injury, injured, niggle, tight, ache, swollen, sharp]
+
+# Free text: injuries, niggles, history. The coach reads this every time.
+notes: |
+  TODO: injuries or niggles.

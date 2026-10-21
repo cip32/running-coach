@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS: weekly report every Sunday 19:00 local time (set the Mac to Europe/Berlin).
+  1. Replace /PATH/TO/running-coach below.
+  2. cp scheduler/launchd.plist.example ~/Library/LaunchAgents/com.runningcoach.weekly.plist
+  3. launchctl load ~/Library/LaunchAgents/com.runningcoach.weekly.plist
+
+  Linux (cron), same schedule with an explicit timezone:
+    CRON_TZ=Europe/Berlin
+    0 19 * * 0  cd /PATH/TO/running-coach && .venv/bin/coach sync && .venv/bin/coach report >> data/scheduled.log 2>&1
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.runningcoach.weekly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string><string>-c</string>
+    <string>cd /PATH/TO/running-coach &amp;&amp; .venv/bin/coach sync &amp;&amp; .venv/bin/coach report</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/PATH/TO/running-coach/data/scheduled.log</string>
+  <key>StandardErrorPath</key><string>/PATH/TO/running-coach/data/scheduled.log</string>
+</dict>
+</plist>

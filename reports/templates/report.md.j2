@@ -1,0 +1,157 @@
+{% set h = m.headline %}{% set rec = m.recovery %}{% set c = m.context %}
+# Weekly training report: {{ m.week }} ({{ m.monday }} → {{ m.sunday }})
+
+{{ athlete }}{% if c.phase %} · {{ c.phase.name }} phase, week {{ c.phase.week }}/{{ c.phase.weeks_total }}{% endif %}{% if c.a_race %} · {{ c.a_race.weeks_to_go }} weeks to {{ c.a_race.name }}{% endif %} · generated {{ generated }}
+
+{% if n._fallback is defined %}
+> Numbers only: coaching commentary needs an API key (see README).
+
+{% endif %}
+## 1. Week headline
+{% if n.headline %}{{ n.headline }}
+
+{% endif %}
+| | This week | vs last week | vs 4-wk avg |
+|---|---|---|---|
+| Distance | {{ h.km }} km | {{ h.vs_last_week.km.abs|signed(' km') }} ({{ h.vs_last_week.km.pct|signed('%') }}) | {{ h.vs_4wk_avg.km.abs|signed(' km') }} ({{ h.vs_4wk_avg.km.pct|signed('%') }}) |
+| Runs | {{ h.runs }} | {{ h.vs_last_week.runs.abs|signed }} | {{ h.vs_4wk_avg.runs.abs|signed }} |
+| Time | {{ h.hours|hours }} | {{ h.vs_last_week.hours.abs|signed(' h') }} | {{ h.vs_4wk_avg.hours.abs|signed(' h') }} |
+| Elevation | {{ h.elev_m }} m | {{ h.vs_last_week.elev_m.abs|signed(' m') }} | {{ h.vs_4wk_avg.elev_m.abs|signed(' m') }} |
+
+| Day | km | Sleep h | Sleep score | Readiness | HRV | RHR |
+|---|---|---|---|---|---|---|
+{% for d in m.daily %}
+| {{ d.weekday }} {{ d.date[5:] }} | {{ d.km }} | {{ d.sleep_h|num(1) }} | {{ d.sleep_score|num }} | {{ d.readiness|num }} | {{ d.hrv|num }} | {{ d.rhr|num }} |
+{% endfor %}
+
+## 2. Sessions
+{% if n.sessions %}{{ n.sessions }}
+
+{% endif %}
+| Date | Session | Type | km | Pace /km | Avg/Max HR | Easy/Steady/Thr/Hard min | Notes |
+|---|---|---|---|---|---|---|---|
+{% for s in m.sessions %}
+| {{ s.date[5:] }} {{ s.start }} | {{ s.name }} | {{ s.type }}{% if s.double %} (double){% endif %} | {{ s.km }} | {{ s.pace or '—' }} | {{ s.avg_hr|num }}/{{ s.max_hr|num }} | {{ s.zone_minutes.easy|num }}/{{ s.zone_minutes.steady|num }}/{{ s.zone_minutes.threshold|num }}/{{ s.zone_minutes.hard|num }} | {% if s.strides %}{{ s.strides }} strides. {% endif %}{% if s.grey_zone %}grey-zone drift. {% endif %}{% if s.hr_drift_pct is not none %}HR drift {{ s.hr_drift_pct }}%. {% endif %}{% if s.zone_source == 'zones' %}zones approx.{% endif %} |
+{% endfor %}
+{% if m.other_activities %}
+
+Other: {% for o in m.other_activities %}{{ o.date[5:] }} {{ o.name }} ({{ o.minutes|num }} min{% if o.sets %}, {{ o.sets }} sets{% endif %}){% if not loop.last %}; {% endif %}{% endfor %}
+{% endif %}
+
+## 3. Key workouts: planned vs executed
+{% if n.key_workouts %}{{ n.key_workouts }}
+
+{% endif %}
+{% if m.key_workouts %}
+| Date | Planned | Executed | Verdict | Why |
+|---|---|---|---|---|
+{% for k in m.key_workouts %}
+| {{ k.date[5:] }} | {{ k.planned }}{% if k.planned_km %} ({{ k.planned_km }} km){% endif %} | {% if k.executed is defined %}{{ k.km }} km, HR {{ k.avg_hr|num }}{% else %}—{% endif %} | **{{ k.verdict }}** | {{ k.why }} |
+{% endfor %}
+{% else %}
+No planned workouts on the calendar this week.
+{% endif %}
+{% if m.unplanned_quality %}
+
+Unplanned quality: {% for u in m.unplanned_quality %}{{ u.date[5:] }} {{ u.name }} ({{ u.type }}){% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+
+## 4. Intensity distribution
+{% if n.intensity %}{{ n.intensity }}
+
+{% endif %}
+Easy {{ (m.intensity.share.easy * 100)|round|int }}% · Steady {{ (m.intensity.share.steady * 100)|round|int }}% · Threshold {{ (m.intensity.share.threshold * 100)|round|int }}% · Hard {{ (m.intensity.share.hard * 100)|round|int }}%
+
+{% if m.intensity.grey_zone_runs %}
+**Grey-zone drift** on {{ m.intensity.grey_zone_runs|length }} easy run(s): {% for g in m.intensity.grey_zone_runs %}{{ g.date[5:] }} ({{ (g.steady_share * 100)|round|int }}% steady){% if not loop.last %}, {% endif %}{% endfor %}
+{% else %}
+No grey-zone drift on easy days.
+{% endif %}
+
+## 5. Load trend
+{% if n.load %}{{ n.load }}
+
+{% endif %}
+| Week | km | Runs | Long run km |
+|---|---|---|---|
+{% for w in m.load.weekly_volume %}
+| {{ w.week }} | {{ w.km }} | {{ w.runs }} | {{ w.long_run_km }} |
+{% endfor %}
+
+Computed ACWR {{ m.load.acwr_now|num(2) }} (ATL {{ m.load.atl_now|num }}, CTL {{ m.load.ctl_now|num }}). Garmin: {{ m.load.garmin.training_status or '—' }}, acute {{ m.load.garmin.acute|num }} / chronic {{ m.load.garmin.chronic|num }} (ratio {{ m.load.garmin.acwr|num(1) }}), VO2max {{ m.load.garmin.vo2max|num(1) }}, LT {{ m.load.garmin.lt_pace or '—' }}/km @ {{ m.load.garmin.lt_hr|num }} bpm, marathon prediction {{ m.load.garmin.pred_marathon_s|hms }}.
+{% if m.load.this_week_long_run %}
+
+Long run this week: {{ m.load.this_week_long_run.km }} km at {{ m.load.this_week_long_run.pace }}/km, HR drift {{ m.load.this_week_long_run.hr_drift_pct|num(1) }}%.
+{% endif %}
+
+## 6. Recovery
+{% if n.recovery %}{{ n.recovery }}
+
+{% endif %}
+- Sleep: {{ rec.sleep.avg_h|num(1) }} h avg (SD {{ rec.sleep.sd_h|num(2) }} h, shortest {{ rec.sleep.min_h|num(1) }} h), score {{ rec.sleep.avg_score|num }}, {{ rec.sleep.short_nights }} short night(s)
+- HRV: {{ rec.hrv.avg|num }} ms avg vs baseline {{ rec.hrv.baseline_low|num }}–{{ rec.hrv.baseline_high|num }}; {{ rec.hrv.nights_below_baseline }} night(s) below; Garmin status {{ rec.hrv.status_last or '—' }}
+- Resting HR: {{ rec.rhr.avg|num(1) }} avg, last 3 days {{ rec.rhr.last_3d|num(1) }} vs 30-day {{ rec.rhr.baseline_30d|num(1) }}
+- Body battery: high {{ rec.body_battery.avg_high|num }}, low {{ rec.body_battery.avg_low|num }} · Readiness avg {{ rec.readiness.avg|num }} ({{ rec.readiness.low_days }} low day(s)) · Stress {{ rec.stress_avg|num }}
+{% if rec.red_flags %}
+
+**Red flags**
+{% for f in rec.red_flags %}
+- ⚠ {{ f }}
+{% endfor %}
+{% endif %}
+{% if m.notes %}
+
+Your notes this week:
+{% for note in m.notes %}
+- {{ note.date[5:] }}: {{ note.text }}
+{% endfor %}
+{% endif %}
+
+## 7. Long-term context
+{% if n.context %}{{ n.context }}
+
+{% endif %}
+{% if c.phase %}- Phase: **{{ c.phase.name }}**, week {{ c.phase.week }} of {{ c.phase.weeks_total }} ({{ c.phase.start }} → {{ c.phase.end }})
+{% endif %}
+- Volume: {{ c.volume.this_week_km }} km vs ramp target {{ c.volume.ramp_target_km|num(1) }} km ({{ c.volume.vs_ramp_km|signed(' km') }}); {{ c.volume.pct_of_goal|num }}% of {{ c.volume.goal_km }} km, {{ c.volume.weeks_to_goal_date|num(1) }} weeks to {{ c.volume.goal_by }}
+{% if c.a_race %}- {{ c.a_race.name }} ({{ c.a_race.date }}, goal {{ c.a_race.goal_time }}): {{ c.a_race.weeks_to_go }} weeks to go
+{% endif %}
+
+## 8. Next week: suggestion
+{% if n.next_week %}
+{{ n.next_week.summary }}
+
+Suggested volume: {{ n.next_week.volume_km }} km
+
+| Day | Suggested session | Why |
+|---|---|---|
+{% for d in n.next_week.days %}
+| {{ d.day }} | {{ d.session }} | {{ d.why }} |
+{% endfor %}
+
+**Protect:** {{ n.next_week.protect|join('; ') }}
+
+**Cut first if recovery is poor:** {{ n.next_week.cut_if_recovery_poor|join('; ') }}
+{% else %}
+_Needs the coaching step (API key). Planned on your Garmin calendar:_
+{% for p in m.next_week_planned %}
+- {{ p.date[5:] }}: {{ p.title }}{{ " (%s km)" % p.km if p.km else "" }}
+{% else %}
+- nothing planned yet
+{% endfor %}
+{% endif %}
+
+## 9. Summary
+{% for b in n.bullets %}
+- {{ b }}
+{% endfor %}
+
+**Three small actions**
+{% for a in n.actions %}
+{{ loop.index }}. {{ a }}
+{% endfor %}
+{% if m.missing %}
+
+---
+Data gaps this week: {{ m.missing|join('; ') }}.
+{% endif %}

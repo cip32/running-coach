@@ -1,0 +1,200 @@
+{% set h = m.headline %}{% set rec = m.recovery %}{% set c = m.context %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training report {{ m.week }}</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --card: #ffffff; --line: #e6e5e1;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #8a8984; --accent: #2a78d6; --accent-soft: #eef4fc;
+    --good: #0ca30c; --warning: #b77f00; --serious: #c4552a; --critical: #d03b3b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-2); }
+  .banner { margin-top: 16px; padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); color: var(--ink-2); font-size: 14px; }
+  section { margin-top: 36px; }
+  h2 { font-size: 18px; margin: 0 0 10px; display: flex; gap: 10px; align-items: baseline; }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .lede { margin: 0 0 14px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .kpi .label { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kpi .delta { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+  figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  figure img { width: 100%; height: auto; display: block; }
+  .wide { margin-top: 12px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.wrap { white-space: normal; min-width: 180px; }
+  th { font-weight: 600; color: var(--ink-2); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; background: #f7f7f5; }
+  tr:last-child td { border-bottom: 0; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .v-on-target { color: var(--good); } .v-too-hard { color: var(--critical); } .v-too-easy { color: var(--warning); }
+  .v-missed { color: var(--serious); } .v-upcoming { color: var(--muted); }
+  .t-long, .t-hard, .t-LT, .t-LT1 { color: var(--accent); }
+  .flags { list-style: none; padding: 0; margin: 12px 0 0; }
+  .flags li { padding: 10px 12px; border-left: 3px solid var(--critical); background: #fbf0f0; border-radius: 6px; margin-bottom: 8px; }
+  .flags li b { color: var(--critical); }
+  .ok { padding: 10px 12px; border-left: 3px solid var(--good); background: #eef8ee; border-radius: 6px; }
+  ul.facts { padding-left: 18px; margin: 8px 0; }
+  .muted { color: var(--muted); }
+  .bullets li { margin-bottom: 6px; }
+  .actions { counter-reset: a; list-style: none; padding: 0; }
+  .actions li { counter-increment: a; padding: 10px 12px 10px 44px; position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+  .actions li::before { content: counter(a); position: absolute; left: 12px; top: 9px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: white; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+  footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+  @media print { section { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Week {{ m.week[-2:] }} · {{ m.monday }} → {{ m.sunday }}</h1>
+  <p>{{ athlete }}{% if c.phase %} · {{ c.phase.name|replace('_', ' ') }} phase, week {{ c.phase.week }}/{{ c.phase.weeks_total }}{% endif %}{% if c.a_race %} · {{ c.a_race.weeks_to_go }} weeks to {{ c.a_race.name }}{% endif %}</p>
+  {% if n._fallback is defined %}<div class="banner">Numbers only. Coaching commentary and the next-week plan need an Anthropic API key (see README).</div>{% endif %}
+</header>
+
+<section>
+  <h2><span class="n">1</span> Week headline</h2>
+  {% if n.headline %}<p class="lede">{{ n.headline }}</p>{% endif %}
+  <div class="kpis">
+    <div class="kpi"><div class="label">Distance</div><div class="value">{{ h.km }} km</div>
+      <div class="delta">{{ h.vs_last_week.km.abs|signed(' km') }} vs last week · {{ h.vs_4wk_avg.km.abs|signed(' km') }} vs 4-wk avg</div></div>
+    <div class="kpi"><div class="label">Runs</div><div class="value">{{ h.runs }}</div>
+      <div class="delta">{{ h.vs_last_week.runs.abs|signed }} vs last week · 4-wk avg {{ h.avg_4wk.runs if h.avg_4wk else '—' }}</div></div>
+    <div class="kpi"><div class="label">Time</div><div class="value">{{ h.hours|hours }}</div>
+      <div class="delta">{{ h.vs_last_week.hours.abs|signed(' h') }} vs last week</div></div>
+    <div class="kpi"><div class="label">Elevation</div><div class="value">{{ h.elev_m }} m</div>
+      <div class="delta">{{ h.vs_last_week.elev_m.abs|signed(' m') }} vs last week</div></div>
+  </div>
+  <div class="grid2">
+    <figure><img alt="Sleep score by night" src="data:image/png;base64,{{ charts.sleep }}"></figure>
+    <figure><img alt="Training readiness by morning" src="data:image/png;base64,{{ charts.readiness }}"></figure>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">2</span> Sessions</h2>
+  {% if n.sessions %}<p class="lede">{{ n.sessions }}</p>{% endif %}
+  <div class="table-wrap"><table>
+    <tr><th>Day</th><th>Session</th><th>Type</th><th>km</th><th>Pace</th><th>HR avg/max</th><th>Easy · Steady · Thr · Hard (min)</th><th>Notes</th></tr>
+    {% for s in m.sessions %}
+    <tr><td>{{ s.date[5:] }} {{ s.start }}</td><td>{{ s.name }}</td>
+      <td><span class="t-{{ s.type }}">{{ s.type }}</span>{% if s.double %} · double{% endif %}</td>
+      <td>{{ s.km }}</td><td>{{ s.pace or '—' }}</td><td>{{ s.avg_hr|num }}/{{ s.max_hr|num }}</td>
+      <td>{{ s.zone_minutes.easy|num }} · {{ s.zone_minutes.steady|num }} · {{ s.zone_minutes.threshold|num }} · {{ s.zone_minutes.hard|num }}</td>
+      <td class="wrap">{% if s.strides %}{{ s.strides }} strides. {% endif %}{% if s.grey_zone %}<b>grey-zone drift.</b> {% endif %}{% if s.hr_drift_pct is not none %}HR drift {{ s.hr_drift_pct }}%. {% endif %}{% if s.zone_source == 'zones' %}<span class="muted">zones approx.</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% if m.other_activities %}<p class="muted">Other: {% for o in m.other_activities %}{{ o.date[5:] }} {{ o.name }} ({{ o.minutes|num }} min{% if o.sets %}, {{ o.sets }} sets{% endif %}){% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+</section>
+
+<section>
+  <h2><span class="n">3</span> Key workouts: planned vs executed</h2>
+  {% if n.key_workouts %}<p class="lede">{{ n.key_workouts }}</p>{% endif %}
+  {% if m.key_workouts %}
+  <div class="table-wrap"><table>
+    <tr><th>Day</th><th>Planned</th><th>Executed</th><th>Verdict</th><th>Why</th></tr>
+    {% for k in m.key_workouts %}
+    <tr><td>{{ k.date[5:] }}</td><td>{{ k.planned }}{% if k.planned_km %} · {{ k.planned_km }} km{% endif %}</td>
+      <td>{% if k.executed is defined %}{{ k.km }} km · HR {{ k.avg_hr|num }}{% else %}—{% endif %}</td>
+      <td><span class="tag v-{{ k.verdict|replace(' ', '-') }}">{{ k.verdict }}</span></td><td class="wrap">{{ k.why }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted">No planned workouts on the calendar this week.</p>{% endif %}
+</section>
+
+<section>
+  <h2><span class="n">4</span> Intensity distribution</h2>
+  {% if n.intensity %}<p class="lede">{{ n.intensity }}</p>{% endif %}
+  <figure><img alt="Time in intensity buckets: easy {{ (m.intensity.share.easy*100)|round|int }}%, steady {{ (m.intensity.share.steady*100)|round|int }}%, threshold {{ (m.intensity.share.threshold*100)|round|int }}%, hard {{ (m.intensity.share.hard*100)|round|int }}%" src="data:image/png;base64,{{ charts.intensity }}"></figure>
+  {% if m.intensity.grey_zone_runs %}
+  <ul class="flags"><li><b>Grey-zone drift</b> on {{ m.intensity.grey_zone_runs|length }} easy run(s): {% for g in m.intensity.grey_zone_runs %}{{ g.date[5:] }} ({{ (g.steady_share*100)|round|int }}% steady){% if not loop.last %}, {% endif %}{% endfor %}</li></ul>
+  {% else %}<p class="ok">No grey-zone drift on easy days.</p>{% endif %}
+</section>
+
+<section>
+  <h2><span class="n">5</span> Load trend</h2>
+  {% if n.load %}<p class="lede">{{ n.load }}</p>{% endif %}
+  <figure><img alt="Weekly volume for the last 8 weeks" src="data:image/png;base64,{{ charts.volume }}"></figure>
+  <div class="grid2">
+    <figure><img alt="Acute to chronic load ratio" src="data:image/png;base64,{{ charts.acwr }}"></figure>
+    <figure><img alt="Longest run per week" src="data:image/png;base64,{{ charts.long_runs }}"></figure>
+  </div>
+  <ul class="facts">
+    <li>Computed ACWR {{ m.load.acwr_now|num(2) }} (ATL {{ m.load.atl_now|num }}, CTL {{ m.load.ctl_now|num }})</li>
+    <li>Garmin: {{ (m.load.garmin.training_status or '—')|replace('_', ' ') }}, acute {{ m.load.garmin.acute|num }} / chronic {{ m.load.garmin.chronic|num }} (ratio {{ m.load.garmin.acwr|num(1) }}), VO2max {{ m.load.garmin.vo2max|num(1) }}</li>
+    <li>LT {{ m.load.garmin.lt_pace or '—' }}/km @ {{ m.load.garmin.lt_hr|num }} bpm · Garmin marathon prediction {{ m.load.garmin.pred_marathon_s|hms }}</li>
+    {% if m.load.this_week_long_run %}<li>Long run: {{ m.load.this_week_long_run.km }} km at {{ m.load.this_week_long_run.pace }}/km, HR drift {{ m.load.this_week_long_run.hr_drift_pct|num(1) }}%</li>{% endif %}
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">6</span> Recovery</h2>
+  {% if n.recovery %}<p class="lede">{{ n.recovery }}</p>{% endif %}
+  <div class="kpis">
+    <div class="kpi"><div class="label">Sleep</div><div class="value">{{ rec.sleep.avg_h|num(1) }} h</div><div class="delta">score {{ rec.sleep.avg_score|num }} · SD {{ rec.sleep.sd_h|num(2) }} h</div></div>
+    <div class="kpi"><div class="label">HRV</div><div class="value">{{ rec.hrv.avg|num }} ms</div><div class="delta">baseline {{ rec.hrv.baseline_low|num }}–{{ rec.hrv.baseline_high|num }} · {{ rec.hrv.nights_below_baseline }} below</div></div>
+    <div class="kpi"><div class="label">Resting HR</div><div class="value">{{ rec.rhr.avg|num(1) }}</div><div class="delta">30-day {{ rec.rhr.baseline_30d|num(1) }} · last 3 d {{ rec.rhr.last_3d|num(1) }}</div></div>
+    <div class="kpi"><div class="label">Body battery</div><div class="value">{{ rec.body_battery.avg_high|num }}</div><div class="delta">avg daily high · low {{ rec.body_battery.avg_low|num }}</div></div>
+  </div>
+  <div class="grid2">
+    <figure><img alt="Overnight HRV against baseline band" src="data:image/png;base64,{{ charts.hrv }}"></figure>
+    <figure><img alt="Sleep score by night" src="data:image/png;base64,{{ charts.sleep }}"></figure>
+  </div>
+  {% if rec.red_flags %}
+  <ul class="flags">{% for f in rec.red_flags %}<li><b>⚠ Red flag:</b> {{ f }}</li>{% endfor %}</ul>
+  {% else %}<p class="ok">No recovery red flags.</p>{% endif %}
+  {% if m.notes %}<p><b>Your notes</b></p><ul class="facts">{% for note in m.notes %}<li>{{ note.date[5:] }}: {{ note.text }}</li>{% endfor %}</ul>{% endif %}
+</section>
+
+<section>
+  <h2><span class="n">7</span> Long-term context</h2>
+  {% if n.context %}<p class="lede">{{ n.context }}</p>{% endif %}
+  <ul class="facts">
+    {% if c.phase %}<li>Phase <b>{{ c.phase.name|replace('_', ' ') }}</b>, week {{ c.phase.week }} of {{ c.phase.weeks_total }} ({{ c.phase.start }} → {{ c.phase.end }})</li>{% endif %}
+    <li>{{ c.volume.this_week_km }} km vs ramp target {{ c.volume.ramp_target_km|num(1) }} km ({{ c.volume.vs_ramp_km|signed(' km') }}) · {{ c.volume.pct_of_goal|num }}% of {{ c.volume.goal_km }} km · {{ c.volume.weeks_to_goal_date|num(1) }} weeks to {{ c.volume.goal_by }}</li>
+    {% if c.a_race %}<li>{{ c.a_race.name }} {{ c.a_race.date }} · goal {{ c.a_race.goal_time }} · <b>{{ c.a_race.weeks_to_go }} weeks</b> to go</li>{% endif %}
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">8</span> Next week: suggestion</h2>
+  {% if n.next_week %}
+  <p class="lede">{{ n.next_week.summary }}</p>
+  <p><b>Suggested volume:</b> {{ n.next_week.volume_km }} km</p>
+  <div class="table-wrap"><table>
+    <tr><th>Day</th><th>Suggested session</th><th>Why</th></tr>
+    {% for d in n.next_week.days %}<tr><td>{{ d.day }}</td><td class="wrap">{{ d.session }}</td><td class="wrap">{{ d.why }}</td></tr>{% endfor %}
+  </table></div>
+  <p><b>Protect:</b> {{ n.next_week.protect|join('; ') }}</p>
+  <p><b>Cut first if recovery is poor:</b> {{ n.next_week.cut_if_recovery_poor|join('; ') }}</p>
+  {% else %}
+  <p class="muted">Needs the coaching step (API key). Planned on your Garmin calendar:</p>
+  <ul class="facts">{% for p in m.next_week_planned %}<li>{{ p.date[5:] }}: {{ p.title }}{% if p.km %} ({{ p.km }} km){% endif %}</li>{% else %}<li>nothing planned yet</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
+<section>
+  <h2><span class="n">9</span> Summary</h2>
+  <ul class="bullets">{% for b in n.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+  <p><b>Three small actions</b></p>
+  <ol class="actions">{% for a in n.actions %}<li>{{ a }}</li>{% endfor %}</ol>
+</section>
+
+<footer>
+  {% if m.missing %}<p>Data gaps: {{ m.missing|join('; ') }}.</p>{% endif %}
+  <p>Generated {{ generated }} · numbers computed from Garmin data; commentary is a suggestion, not medical advice.</p>
+</footer>
+</main>
+</body>
+</html>
