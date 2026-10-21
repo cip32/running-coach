@@ -9,6 +9,7 @@ import datetime as dt
 import logging
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,8 +31,28 @@ def _path(name: str, default: str) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
+def find_claude_code() -> Path | None:
+    """Claude Code CLI: CLAUDE_CODE_PATH, then PATH, then the newest copy bundled
+    with the Claude desktop app (%APPDATA%/Claude/claude-code/<version>/<id>/claude.exe)."""
+    explicit = os.getenv("CLAUDE_CODE_PATH")
+    if explicit and Path(explicit).exists():
+        return Path(explicit)
+    on_path = shutil.which("claude")
+    if on_path:
+        return Path(on_path)
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        def version(p: Path) -> tuple:
+            return tuple(int(x) for x in re.findall(r"\d+", p.parent.parent.name)) or (0,)
+        bundled = sorted(Path(appdata, "Claude", "claude-code").glob("*/*/claude.exe"), key=version)
+        if bundled:
+            return bundled[-1]
+    return None
+
+
 @dataclass(frozen=True)
 class Settings:
+    backend: str                # "claude-code" (your Claude subscription) or "api" (API key + credits)
     model: str
     chat_model: str
     garmin_token_dir: Path
@@ -48,10 +69,15 @@ class Settings:
     def has_api_key(self) -> bool:
         return bool(os.getenv("ANTHROPIC_API_KEY"))
 
+    @property
+    def llm_available(self) -> bool:
+        return find_claude_code() is not None if self.backend == "claude-code" else self.has_api_key
+
 
 def settings() -> Settings:
     model = os.getenv("COACH_MODEL") or "claude-opus-5-5"
     return Settings(
+        backend=(os.getenv("COACH_BACKEND") or "claude-code").strip().lower(),
         model=model,
         chat_model=os.getenv("COACH_CHAT_MODEL") or model,
         garmin_token_dir=_path("GARMIN_TOKEN_DIR", "~/.garminconnect"),
@@ -112,9 +138,13 @@ _SECRET_RE = re.compile(
 
 class RedactSecrets(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = _SECRET_RE.sub("[REDACTED]", str(record.msg))
-        if record.args:
-            record.args = tuple(_SECRET_RE.sub("[REDACTED]", str(a)) for a in record.args)
+        # format first, then redact the final text, so %-placeholders and
+        # numeric args can't be broken by the substitution
+        try:
+            message = record.getMessage()
+        except Exception:
+            message = str(record.msg)
+        record.msg, record.args = _SECRET_RE.sub("[REDACTED]", message), None
         return True
 
 

@@ -92,3 +92,6 @@ def test_secret_redaction():
     rec = logging.LogRecord("x", logging.INFO, "", 0, "key sk-ant-abc123 and password=hunter2", None, None)
     config.RedactSecrets().filter(rec)
     assert "sk-ant" not in rec.msg and "hunter2" not in rec.msg
+    rec = logging.LogRecord("x", logging.INFO, "", 0, "%s %d token=%s", ("POST", 400, "abc"), None)
+    config.RedactSecrets().filter(rec)
+    assert rec.getMessage() == "POST 400 [REDACTED]"

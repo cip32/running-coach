@@ -24,10 +24,14 @@ if ($Remove) {
 $coach = Join-Path $root ".venv\Scripts\coach.exe"
 if (-not (Test-Path $coach)) { throw "coach.exe not found at $coach. Run the README setup first." }
 $log = Join-Path $root "data\scheduled.log"
-$cmd = "/c cd /d `"$root`" && `"$coach`" sync >> `"$log`" 2>&1 && `"$coach`" report >> `"$log`" 2>&1"
+# "&" (not "&&"): the report is still written from existing data if the sync fails
+$cmd = "/c cd /d `"$root`" && `"$coach`" sync >> `"$log`" 2>&1 & `"$coach`" report >> `"$log`" 2>&1"
 
 $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $cmd -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $Time
+# Store the start time without a UTC offset so it follows local clock time across
+# daylight-saving changes (otherwise 19:00 summer time fires at 18:00 in winter).
+$trigger.StartBoundary = (Get-Date $Time).ToString("yyyy-MM-dd'T'HH:mm:ss")
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2)
 

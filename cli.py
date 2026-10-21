@@ -16,6 +16,12 @@ import config
 log = logging.getLogger("coach")
 
 
+def _llm_hint(s: config.Settings) -> str:
+    if s.backend == "claude-code":
+        return "Claude Code not found; install the Claude desktop app or set CLAUDE_CODE_PATH in .env"
+    return "ANTHROPIC_API_KEY missing in .env (or set COACH_BACKEND=claude-code to use your Claude subscription)"
+
+
 def _today(goals: dict) -> dt.date:
     return dt.datetime.now(config.tz(goals)).date()
 
@@ -88,9 +94,9 @@ def cmd_report(args: argparse.Namespace) -> int:
         args.since, args.full, args.core_only = None, False, True
         cmd_sync(args)                              # demo.db is always regenerated up to today
     monday = parse_week(args.week) if args.week else last_complete_monday(today)
-    use_llm = not args.no_llm and s.has_api_key
-    if not args.no_llm and not s.has_api_key:
-        print("No ANTHROPIC_API_KEY in .env: rendering numbers only.")
+    use_llm = not args.no_llm and s.llm_available
+    if not args.no_llm and not s.llm_available:
+        print(f"Coaching step unavailable ({_llm_hint(s)}): rendering numbers only.")
     out_dir = s.reports_dir / "demo" if args.demo else s.reports_dir
     with _store(args.demo) as store:
         res = generate(store, goals, monday, today, out_dir, use_llm=use_llm, model=s.model)
@@ -125,8 +131,8 @@ def _chat_session():
     from analysis.metrics import digest
     from llm import Chat, chat_context
     s, goals = config.settings(), config.load_goals()
-    if not s.has_api_key:
-        print("Chat needs ANTHROPIC_API_KEY in .env (see README).")
+    if not s.llm_available:
+        print(f"Chat unavailable: {_llm_hint(s)}.")
         return None
     today = _today(goals)
     with _store() as store:
@@ -201,7 +207,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     print("Config")
     check(".env present", (config.ROOT / ".env").exists(), "copy .env.example to .env")
-    check("ANTHROPIC_API_KEY set", s.has_api_key, "add your key to .env (never paste it in chat)")
+    if s.backend == "claude-code":
+        exe = config.find_claude_code()
+        check(f"Claude backend: Claude Code on your subscription ({exe.parent.parent.name if exe else 'not found'})",
+              exe is not None, "install the Claude desktop app or set CLAUDE_CODE_PATH in .env")
+    else:
+        check("Claude backend: API, ANTHROPIC_API_KEY set", s.has_api_key,
+              "add your key to .env (never paste it in chat)")
     print(f"       model: {s.model}  chat model: {s.chat_model}")
     try:
         goals = config.load_goals()

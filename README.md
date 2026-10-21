@@ -29,11 +29,14 @@ copy .env.example .env
 
 If you prefer [uv](https://docs.astral.sh/uv/), run `uv venv` and then `uv pip install -e ".[dev]"`.
 
-Next, open `.env` in an editor and fill it in. **Never paste keys into chat.**
+Next, choose how the coach talks to Claude, with `COACH_BACKEND` in `.env`:
 
-1. **`ANTHROPIC_API_KEY`:** create one at console.anthropic.com → API keys. API use is billed separately from a Claude subscription; a weekly report costs cents.
-2. **`COACH_MODEL`:** the default is `claude-opus-5-5`. Set `COACH_CHAT_MODEL` if you want a different model for chat.
-3. **Everything else:** the defaults are fine. `.env` is gitignored.
+- **`claude-code` (default):** uses **your Claude subscription** through the Claude Code CLI that ships with the Claude desktop app. You don't need an API key or credits. Usage counts against your normal Claude limits. Claude Code is found automatically; set `CLAUDE_CODE_PATH` only if `coach doctor` can't find it. Your API key, if any, is never passed to Claude Code, so it can't bill the API by accident.
+- **`api`:** uses `ANTHROPIC_API_KEY` from console.anthropic.com with prepaid API credits, billed per use and separately from a subscription.
+
+Also in `.env`:
+- `COACH_MODEL` defaults to `claude-opus-5-5`. Set `COACH_CHAT_MODEL` if you want a different model for chat.
+- Everything else can stay on its defaults. `.env` is gitignored. **Never paste keys into chat.**
 
 Then log in to Garmin once. You type your own email, password and code in the terminal. The password is used once and never stored; only an OAuth token is kept in `~/.garminconnect`, outside the repo.
 
@@ -132,7 +135,7 @@ Syncing is **idempotent**:
 **How the work is split:**
 - All numbers are computed deterministically in `analysis/` and covered by unit tests. Claude only interprets them: it's told to use only numbers present in the data and to say when data is missing.
 - Missing data (e.g. a night without HRV) is counted and listed, never filled in.
-- Without an API key, or with `--no-llm`, you get the full numbers report with facts-only bullets.
+- With `--no-llm`, or when Claude isn't reachable (Claude Code missing, usage limit hit, API out of credits), you still get the full numbers report with facts-only bullets, and the reason is listed under data gaps.
 
 ## Coaching logic
 
@@ -161,7 +164,7 @@ db/schema.sql, db/store.py SQLite schema and upserts
 analysis/                  zones, classification, load, weeks, recovery, plan vs executed, context
 reports/                   charts (matplotlib), Jinja templates, render + pipeline
 prompts/                   weekly report and chat instructions for Claude
-llm.py                     Claude API calls (structured output, prompt caching, fallbacks)
+llm.py                     Claude calls: Claude Code (subscription) or API backend; structured output, caching
 delivery/                  optional email / Notion (off by default)
 scheduler/                 Windows task installer, launchd/cron example
 tests/                     unit tests with fixture data (`pytest`)
@@ -197,7 +200,7 @@ The tests cover:
 
 ## Your TODOs
 
-- [ ] Put your Anthropic API key in `.env` (`ANTHROPIC_API_KEY=`).
+- [x] Claude access: done. The default `COACH_BACKEND=claude-code` uses your Claude subscription. An API key is only needed if you switch to `COACH_BACKEND=api`.
 - [ ] In `goals.yaml` → `zones`:
   - [ ] Confirm `max_hr`, `lt1_hr`, `lt2_hr` and the `hr_buckets` floors. They're pre-filled from Garmin: max 185, LTHR 177, zone floors 91/114/152/166/175.
   - [ ] Set your pace zones.
