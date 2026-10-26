@@ -160,8 +160,8 @@ def _slim_metrics(m: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def weekly_narrative(metrics: dict[str, Any], goals: dict, previous: list[dict], *,
-                     model: str | None = None) -> dict[str, Any]:
+def weekly_prompt(metrics: dict[str, Any], previous: list[dict]) -> tuple[str, str]:
+    """(system, user) text for the weekly narrative; shared by every backend and `coach brief`."""
     payload = {
         "metrics": _slim_metrics(metrics),
         "athlete_notes_this_week": metrics.get("notes", []),
@@ -169,6 +169,34 @@ def weekly_narrative(metrics: dict[str, Any], goals: dict, previous: list[dict],
     }
     user = ("Write this week's coaching narrative from this data.\n\n"
             f"<week_data>\n{json.dumps(payload, default=str)}\n</week_data>")
+    return _system_text("weekly_report.md"), user
+
+
+def validate_narrative(n: Any, schema: dict[str, Any] = NARRATIVE_SCHEMA, path: str = "narrative") -> dict:
+    """Minimal structural check for narratives that didn't come through a
+    schema-constrained API call (e.g. written by the cloud agent)."""
+    t = schema.get("type")
+    if t == "object":
+        if not isinstance(n, dict):
+            raise ValueError(f"{path} must be an object")
+        missing = [k for k in schema["required"] if k not in n]
+        if missing:
+            raise ValueError(f"{path} is missing {missing}")
+        for k, sub in schema["properties"].items():
+            validate_narrative(n[k], sub, f"{path}.{k}")
+    elif t == "array":
+        if not isinstance(n, list):
+            raise ValueError(f"{path} must be a list")
+        for i, item in enumerate(n):
+            validate_narrative(item, schema["items"], f"{path}[{i}]")
+    elif t == "string" and not isinstance(n, str):
+        raise ValueError(f"{path} must be a string")
+    return n
+
+
+def weekly_narrative(metrics: dict[str, Any], goals: dict, previous: list[dict], *,
+                     model: str | None = None) -> dict[str, Any]:
+    _, user = weekly_prompt(metrics, previous)
     s = config.settings()
     if s.backend == "claude-code":
         out = claude_code(user, _system_text("weekly_report.md"), model=model or s.model,

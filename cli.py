@@ -9,6 +9,7 @@ import argparse
 import datetime as dt
 import getpass
 import logging
+import os
 import sys
 
 import config
@@ -98,13 +99,108 @@ def cmd_report(args: argparse.Namespace) -> int:
     if not args.no_llm and not s.llm_available:
         print(f"Coaching step unavailable ({_llm_hint(s)}): rendering numbers only.")
     out_dir = s.reports_dir / "demo" if args.demo else s.reports_dir
+    override = None
+    if getattr(args, "narrative_file", None):
+        import json
+        from pathlib import Path
+        override = json.loads(Path(args.narrative_file).read_text(encoding="utf-8"))
     with _store(args.demo) as store:
-        res = generate(store, goals, monday, today, out_dir, use_llm=use_llm, model=s.model)
+        res = generate(store, goals, monday, today, out_dir, use_llm=use_llm and override is None,
+                       model=s.model, narrative_override=override)
     print(f"Report {res['week']}:\n  {res['md']}\n  {res['html']}")
     if not args.demo:
         from delivery import deliver
         deliver(res, s)
     return 0
+
+
+def cmd_brief(args: argparse.Namespace) -> int:
+    """Write everything needed to author the weekly narrative (instructions,
+    principles, goals, this week's data, output schema) to one file. The cloud
+    routine reads it, writes the narrative JSON, and passes it to
+    `coach report --narrative-file`."""
+    import json
+    from pathlib import Path
+    from analysis.metrics import build_week
+    from analysis.weeks import last_complete_monday, parse_week
+    from llm import NARRATIVE_SCHEMA, weekly_prompt
+    from reports.pipeline import previous_reports
+    goals = config.load_goals()
+    today = _today(goals)
+    monday = parse_week(args.week) if args.week else last_complete_monday(today)
+    with _store() as store:
+        m = build_week(store, goals, monday, today=today)
+        system, user = weekly_prompt(m, previous_reports(store, m["week"]))
+    out = Path(args.out or config.settings().db_path.parent / f"brief-{m['week']}.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        f"# Weekly coaching brief {m['week']}\n\n"
+        "Write the narrative as a single JSON object that matches the schema at the end, "
+        "following the instructions, coaching principles and goals below. Use only numbers from the week data.\n\n"
+        f"## Instructions, principles and goals\n\n{system}\n\n## This week\n\n{user}\n\n"
+        f"## Output JSON schema\n\n```json\n{json.dumps(NARRATIVE_SCHEMA, indent=1)}\n```\n",
+        encoding="utf-8")
+    print(f"Brief for {m['week']}: {out}")
+    return 0
+
+
+def cmd_export_garmin_token(args: argparse.Namespace) -> int:
+    """Save the Garmin login as one token string (for the cloud environment's
+    GARMIN_TOKENS secret) to a gitignored file. The token is never printed."""
+    from garminconnect import Garmin
+    s = config.settings()
+    if not s.garmin_token_dir.exists():
+        print("No Garmin login on this PC yet. Run `coach login` first.")
+        return 1
+    g = Garmin()
+    g.login(str(s.garmin_token_dir))
+    out = s.db_path.parent / "garmin_token.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(g.client.dumps(), encoding="utf-8")
+    print(f"Garmin token saved to {out}\n"
+          "Copy the whole file content into your cloud environment as GARMIN_TOKENS, then delete the file.\n"
+          "Never paste it into chat or commit it.")
+    return 0
+
+
+def cmd_slim_db(args: argparse.Namespace) -> int:
+    """Drop the raw API cache and compact the database so it fits in git."""
+    with _store() as store:
+        before = store.counts()["raw_cache"]
+        store.db.execute("DELETE FROM raw_cache")
+        store.db.commit()
+        store.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        store.db.execute("VACUUM")
+        path = store.path
+    print(f"Removed {before} cached raw responses; {path} is now {path.stat().st_size / 1e6:.1f} MB")
+    return 0
+
+
+RETRY_AFTER_H = 6   # a numbers-only report is retried at most this often
+
+
+def cmd_weekly(args: argparse.Namespace) -> int:
+    """What the scheduled task runs (Sunday 19:00, at logon and on unlock):
+    sync + report for the due week, unless that report already exists. Cheap to
+    call often; it exits immediately when there is nothing to do."""
+    from analysis.load import iso_week
+    from analysis.weeks import due_monday
+    goals = config.load_goals()
+    now = dt.datetime.now(config.tz(goals)).replace(tzinfo=None)
+    monday = due_monday(now)
+    week = iso_week(monday)
+    with _store() as store:
+        existing = store.report(week)
+    if existing and not args.force:
+        generated = dt.datetime.fromisoformat(existing["generated_at"]).astimezone().replace(tzinfo=None)
+        if existing["narrative"] or now - generated < dt.timedelta(hours=RETRY_AFTER_H):
+            print(f"{now:%Y-%m-%d %H:%M} {week}: report already done, nothing to do.")
+            return 0
+    print(f"{now:%Y-%m-%d %H:%M} {week}: syncing and building the weekly report.")
+    sync_rc = cmd_sync(argparse.Namespace(since=None, full=False, core_only=False, demo=False))
+    if sync_rc:
+        print("Sync stopped early; building the report from the data already saved.")
+    return cmd_report(argparse.Namespace(week=week, no_llm=False, demo=False))
 
 
 # --- note / ask / chat ---------------------------------------------------------
@@ -209,8 +305,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     check(".env present", (config.ROOT / ".env").exists(), "copy .env.example to .env")
     if s.backend == "claude-code":
         exe = config.find_claude_code()
-        check(f"Claude backend: Claude Code on your subscription ({exe.parent.parent.name if exe else 'not found'})",
+        check(f"Claude backend: Claude Code on your subscription ({exe if exe else 'not found'})",
               exe is not None, "install the Claude desktop app or set CLAUDE_CODE_PATH in .env")
+        check("CLAUDE_CODE_OAUTH_TOKEN set (long-lived login for scheduled runs)",
+              bool(os.getenv("CLAUDE_CODE_OAUTH_TOKEN")),
+              "run `claude setup-token` yourself and put the token in .env (see README)")
     else:
         check("Claude backend: API, ANTHROPIC_API_KEY set", s.has_api_key,
               "add your key to .env (never paste it in chat)")
@@ -222,7 +321,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"       {todos} TODO lines left in goals.yaml")
     except Exception as e:
         check(f"goals.yaml parses ({e})", False)
-    check("Garmin login tokens", s.garmin_token_dir.exists(), "run `coach login`")
+    check("Garmin login", s.garmin_token_dir.exists() or bool(os.getenv("GARMIN_TOKENS")), "run `coach login`")
     local = time.strftime("%z")
     berlin = dt.datetime.now(config.tz()).strftime("%z")
     check(f"computer timezone matches Europe/Berlin ({local})", local == berlin,
@@ -261,7 +360,21 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--week", help="ISO week, e.g. 2026-W43 (default: last complete week)")
     rp.add_argument("--no-llm", action="store_true", help="numbers only, no Claude commentary")
     rp.add_argument("--demo", action="store_true", help="use fake demo data (no accounts needed)")
+    rp.add_argument("--narrative-file", help="use a narrative JSON written from `coach brief` instead of calling Claude")
     rp.set_defaults(fn=cmd_report)
+
+    bp = sub.add_parser("brief", help="write the coaching brief for a week (used by the cloud routine)")
+    bp.add_argument("--week", help="ISO week (default: last complete week)")
+    bp.add_argument("--out", help="output file (default data/brief-<week>.md)")
+    bp.set_defaults(fn=cmd_brief)
+
+    sub.add_parser("export-garmin-token", help="save the Garmin login as a token string for the cloud (never printed)") \
+        .set_defaults(fn=cmd_export_garmin_token)
+    sub.add_parser("slim-db", help="drop the raw API cache and compact the database (for git)").set_defaults(fn=cmd_slim_db)
+
+    wp = sub.add_parser("weekly", help="scheduled job: sync + report for the due week if not done yet")
+    wp.add_argument("--force", action="store_true", help="rebuild even if this week's report exists")
+    wp.set_defaults(fn=cmd_weekly)
 
     np_ = sub.add_parser("note", help="log how you felt, niggles, life stress")
     np_.add_argument("text", nargs="+")

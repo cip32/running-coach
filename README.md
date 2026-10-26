@@ -31,7 +31,10 @@ If you prefer [uv](https://docs.astral.sh/uv/), run `uv venv` and then `uv pip i
 
 Next, choose how the coach talks to Claude, with `COACH_BACKEND` in `.env`:
 
-- **`claude-code` (default):** uses **your Claude subscription** through the Claude Code CLI that ships with the Claude desktop app. You don't need an API key or credits. Usage counts against your normal Claude limits. Claude Code is found automatically; set `CLAUDE_CODE_PATH` only if `coach doctor` can't find it. Your API key, if any, is never passed to Claude Code, so it can't bill the API by accident.
+- **`claude-code` (default):** uses **your Claude subscription** through the Claude Code CLI that ships with the Claude desktop app (or the VS Code extension). You don't need an API key or credits. Usage counts against your normal Claude limits.
+  - Claude Code is found automatically, including after app updates move it. Set `CLAUDE_CODE_PATH` only if `coach doctor` can't find it.
+  - **One-time login for unattended runs:** in a terminal, run the `claude.exe` path that `coach doctor` shows, with `setup-token`. Approve in the browser, then paste the printed token into `.env` as `CLAUDE_CODE_OAUTH_TOKEN=`. It lasts a year. Never paste it into chat.
+  - Your API key, if any, is never passed to Claude Code, so it can't bill the API by accident.
 - **`api`:** uses `ANTHROPIC_API_KEY` from console.anthropic.com with prepaid API credits, billed per use and separately from a subscription.
 
 Also in `.env`:
@@ -84,7 +87,8 @@ Syncing is **idempotent**:
 | `coach note "left calf tight after strides"` | Log feelings, niggles, life stress. Used in the next report and in chat. `--date` to backdate |
 | `coach ask "Should I move the long run to Saturday?"` | One question to the coach, using goals, principles, 8 weeks of data, the latest report and the last 14 days of notes |
 | `coach chat` | Multi-turn version of `ask`. `note: ...` inside chat logs a note |
-| `coach schedule install` / `remove` | Windows Task Scheduler job: `sync` + `report` every Sunday 19:00 |
+| `coach weekly [--force]` | What the scheduled task runs: sync + report for the due week, skipped if already done |
+| `coach schedule install` / `remove` | Windows Task Scheduler job: `coach weekly` on Sunday 19:00, at logon and on unlock |
 | `coach doctor` | Check config, login, timezone, database counts |
 | `coach login` | Redo the Garmin login if tokens expire |
 
@@ -176,7 +180,20 @@ Subclass `adapters.base.SourceAdapter` and implement the methods that source can
 
 ## Scheduling and delivery
 
-- **Windows:** run `coach schedule install`. It registers *RunningCoachWeeklyReport*, which runs Sundays at 19:00 local time and runs late if the PC was off. `coach doctor` checks that Windows is on Berlin time. The log goes to `data/scheduled.log`.
+- **Windows:** run `coach schedule install`. It registers *RunningCoachWeeklyReport*, which runs `coach weekly`:
+  - **Triggers:** every Sunday at 19:00 local time, and also whenever you log on or unlock the PC.
+  - **Catch-up:** `coach weekly` builds the report for the week that is due, unless it already exists. A Sunday missed because the PC was asleep or off is caught up the next time you use it, and every other run exits in under a second.
+  - **Week boundary:** a week only becomes "due" on its Sunday at 19:00, so unlocking on Sunday morning never produces a half-week report.
+  - **Retries:** a numbers-only report (Claude unavailable) is retried at most every 6 hours.
+  - **Logs and checks:** the log goes to `data/scheduled.log`, and `coach doctor` checks that Windows is on Berlin time.
+- **Cloud (recommended):** a Claude Code cloud routine runs on Sundays, so your PC can be off. The steps it follows are in `scheduler/cloud_routine.md`:
+  1. It clones this repo.
+  2. It syncs Garmin using the `GARMIN_TOKENS` secret from `coach export-garmin-token`.
+  3. It writes the coaching text itself from `coach brief` and builds the report with `coach report --narrative-file`.
+  4. It posts the report to the Notion page *Weekly Training Reports*.
+  5. It commits the trimmed history in `history/coach.db` back to the repo.
+
+  The cloud environment needs two variables, `GARMIN_TOKENS` and `COACH_DB=history/coach.db`, plus network access to `*.garmin.com`.
 - **macOS / Linux:** see `scheduler/launchd.plist.example`, which also has the cron line with `CRON_TZ=Europe/Berlin`.
 - **GitHub Actions** isn't recommended: your Garmin tokens and database live on this machine.
 - **Delivery:**

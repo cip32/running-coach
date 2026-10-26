@@ -49,6 +49,31 @@ def test_ask_streams_with_context(tmp_path, monkeypatch, capsys):
     assert calls[0]["system"][-1]["cache_control"] == {"type": "ephemeral"}
 
 
+def test_weekly_skips_done_week_and_runs_missing_one(tmp_path, monkeypatch, capsys):
+    from analysis.load import iso_week
+    from analysis.weeks import due_monday
+    db = tmp_path / "coach.db"
+    monkeypatch.setattr(cli, "_store", lambda demo=False: Store(db))
+    ran = []
+    monkeypatch.setattr(cli, "cmd_sync", lambda a: ran.append("sync") or 0)
+    monkeypatch.setattr(cli, "cmd_report", lambda a: ran.append(("report", a.week)) or 0)
+    week = iso_week(due_monday(dt.datetime.now(config.tz()).replace(tzinfo=None)))
+
+    assert cli.main(["weekly"]) == 0                      # nothing yet -> sync + report
+    assert ran == ["sync", ("report", week)]
+
+    ran.clear()
+    with Store(db) as s:
+        s.save_report(week, "a.md", "a.html", {}, {"bullets": []})
+    assert cli.main(["weekly"]) == 0                      # done -> no Garmin calls at all
+    assert ran == [] and "nothing to do" in capsys.readouterr().out
+
+    with Store(db) as s:                                  # numbers-only, just generated -> don't hammer
+        s.save_report(week, "a.md", "a.html", {}, None)
+    assert cli.main(["weekly"]) == 0 and ran == []
+    assert cli.main(["weekly", "--force"]) == 0 and ran == ["sync", ("report", week)]
+
+
 def test_ask_without_key_is_friendly(monkeypatch, capsys):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert cli.main(["ask", "hi"]) == 1

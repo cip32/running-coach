@@ -61,12 +61,34 @@ def test_chat_resumes_session(cc):
     assert second["input"] == "Can I race Sunday?"
 
 
-def test_find_claude_code_prefers_newest_bundled(monkeypatch, tmp_path):
-    for v in ("2.1.99", "2.1.304", "2.1.300"):
-        exe = tmp_path / "Claude" / "claude-code" / v / "x" / "claude.exe"
+def test_find_claude_code_prefers_newest_across_layouts(monkeypatch, tmp_path):
+    """Old desktop layout, new desktop layout (after the app update) and the VS Code extension."""
+    layouts = [
+        tmp_path / "roaming/Claude/claude-code/2.1.304/x/claude.exe",
+        tmp_path / "local/Claude-Data/claude_pkg/claude-code/2.1.308/y/claude.exe",
+        tmp_path / "home/.vscode/extensions/anthropic.claude-code-2.1.306-win32-x64/resources/native-binary/claude.exe",
+    ]
+    for exe in layouts:
         exe.parent.mkdir(parents=True)
         exe.write_text("")
     monkeypatch.delenv("CLAUDE_CODE_PATH", raising=False)
     monkeypatch.setattr(config.shutil, "which", lambda name: None)
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert config.find_claude_code().parent.parent.name == "2.1.304"
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    assert config.find_claude_code() == layouts[1]
+    layouts[1].unlink()
+    assert config.find_claude_code() == layouts[2]
+
+
+def test_oauth_token_reaches_claude_code(cc, store):
+    """The long-lived subscription token must be passed through (unlike API keys)."""
+    import os
+    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "test-token"
+    try:
+        cc.replies.append({"structured_output": NARRATIVE})
+        llm.weekly_narrative(_metrics(store), GOALS, [])
+        env = cc.calls[0]["env"]
+        assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "test-token" and "ANTHROPIC_API_KEY" not in env
+    finally:
+        del os.environ["CLAUDE_CODE_OAUTH_TOKEN"]

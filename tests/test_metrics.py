@@ -128,6 +128,15 @@ def test_headline_with_no_history():
     assert h["vs_last_week"]["km"] == {"abs": None, "pct": None} and h["avg_4wk"] is None
 
 
+def test_due_monday_switches_at_sunday_19():
+    sun = dt.date(2026, 10, 25)
+    assert weeks.due_monday(dt.datetime(2026, 10, 25, 10, 0)) == dt.date(2026, 10, 12)   # Sunday morning: last week
+    assert weeks.due_monday(dt.datetime(2026, 10, 25, 19, 0)) == dt.date(2026, 10, 19)   # Sunday 19:00: this week
+    assert weeks.due_monday(dt.datetime(2026, 10, 26, 9, 30)) == dt.date(2026, 10, 19)   # Monday catch-up
+    assert weeks.due_monday(dt.datetime(2026, 10, 31, 23, 0)) == dt.date(2026, 10, 19)   # Saturday
+    assert sun.weekday() == 6
+
+
 def test_week_helpers():
     assert weeks.parse_week("2026-W43") == dt.date(2026, 10, 19)
     assert weeks.last_complete_monday(dt.date(2026, 10, 25)) == dt.date(2026, 10, 19)   # Sunday

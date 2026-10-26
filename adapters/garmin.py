@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -147,10 +148,16 @@ class GarminAdapter(SourceAdapter):
     @property
     def g(self) -> Garmin:
         if self._g is None:
-            if not self.token_dir.exists():
-                raise RuntimeError("No Garmin login found. Run `coach login` first.")
             g = Garmin()
-            g.login(str(self.token_dir))
+            # GARMIN_TOKENS (the token string from `coach export-garmin-token`) is how the
+            # cloud run logs in; locally the token folder written by `coach login` is used
+            tokens = (os.getenv("GARMIN_TOKENS") or "").strip()
+            if tokens:
+                g.login(tokens)
+            elif self.token_dir.exists():
+                g.login(str(self.token_dir))
+            else:
+                raise RuntimeError("No Garmin login found. Run `coach login` (or set GARMIN_TOKENS).")
             self._g = g
         return self._g
 

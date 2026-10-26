@@ -22,6 +22,18 @@ def last_complete_monday(today: dt.date) -> dt.date:
     return this if today.weekday() == 6 else this - dt.timedelta(days=7)
 
 
+REPORT_HOUR = 19   # the weekly report is due Sunday 19:00 local time
+
+
+def due_monday(now: dt.datetime) -> dt.date:
+    """Monday of the most recent week whose report is due. A week becomes due on
+    its Sunday at REPORT_HOUR, so Sunday-morning catch-ups still pick last week."""
+    this = monday_of(now.date())
+    if now.weekday() == 6 and now.hour >= REPORT_HOUR:
+        return this
+    return this - dt.timedelta(days=7)
+
+
 def _delta(cur: float, ref: float | None) -> dict[str, float | None]:
     if ref is None:
         return {"abs": None, "pct": None}

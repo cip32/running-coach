@@ -31,23 +31,32 @@ def _path(name: str, default: str) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
+# Where the Claude desktop app and the VS Code extension keep their Claude Code
+# binary; app updates have moved it before, so every known layout is searched.
+_BUNDLED_CLAUDE_CODE = (
+    ("APPDATA", "Claude/claude-code/*/*/claude.exe"),
+    ("LOCALAPPDATA", "Claude-Data/*/claude-code/*/*/claude.exe"),
+    ("USERPROFILE", ".vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude.exe"),
+)
+
+
+def _path_version(p: Path) -> tuple[int, ...]:
+    found = re.findall(r"(\d+)\.(\d+)\.(\d+)", str(p))
+    return tuple(int(x) for x in found[-1]) if found else (0,)
+
+
 def find_claude_code() -> Path | None:
-    """Claude Code CLI: CLAUDE_CODE_PATH, then PATH, then the newest copy bundled
-    with the Claude desktop app (%APPDATA%/Claude/claude-code/<version>/<id>/claude.exe)."""
+    """Claude Code CLI: CLAUDE_CODE_PATH, then PATH, then the newest bundled copy
+    (desktop app or VS Code extension)."""
     explicit = os.getenv("CLAUDE_CODE_PATH")
     if explicit and Path(explicit).exists():
         return Path(explicit)
     on_path = shutil.which("claude")
     if on_path:
         return Path(on_path)
-    appdata = os.getenv("APPDATA")
-    if appdata:
-        def version(p: Path) -> tuple:
-            return tuple(int(x) for x in re.findall(r"\d+", p.parent.parent.name)) or (0,)
-        bundled = sorted(Path(appdata, "Claude", "claude-code").glob("*/*/claude.exe"), key=version)
-        if bundled:
-            return bundled[-1]
-    return None
+    candidates = [p for env, pattern in _BUNDLED_CLAUDE_CODE if os.getenv(env)
+                  for p in Path(os.environ[env]).glob(pattern)]
+    return max(candidates, key=_path_version) if candidates else None
 
 
 @dataclass(frozen=True)
