@@ -11,6 +11,7 @@ re-fetched only when it falls inside the refresh window.
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import logging
 import os
@@ -153,6 +154,9 @@ class GarminAdapter(SourceAdapter):
             # cloud run logs in; locally the token folder written by `coach login` is used
             tokens = (os.getenv("GARMIN_TOKENS") or "").strip()
             if tokens:
+                # older exports are base64-wrapped JSON; current garminconnect only takes raw JSON
+                if not tokens.startswith("{"):
+                    tokens = base64.b64decode(tokens).decode("utf-8")
                 g.login(tokens)
             elif self.token_dir.exists():
                 g.login(str(self.token_dir))

@@ -1,5 +1,6 @@
 """Pieces the cloud routine relies on."""
 
+import base64
 import copy
 import datetime as dt
 import json
@@ -72,10 +73,12 @@ def test_garmin_logs_in_from_env_tokens(monkeypatch, tmp_path):
         def login(self, tokenstore=None):
             seen.append(tokenstore)
     monkeypatch.setattr(gmod, "Garmin", FakeGarmin)
-    monkeypatch.setenv("GARMIN_TOKENS", "  long-token-string  ")
-    a = gmod.GarminAdapter(tmp_path / "missing-dir", Store(":memory:"), today=dt.date(2026, 10, 26))
-    a.g
-    assert seen == ["long-token-string"]
+    # base64-wrapped JSON (older exports) is decoded; raw JSON passes through
+    monkeypatch.setenv("GARMIN_TOKENS", "  " + base64.b64encode(b'{"di_token": "x"}').decode() + "  ")
+    gmod.GarminAdapter(tmp_path / "missing-dir", Store(":memory:"), today=dt.date(2026, 10, 26)).g
+    monkeypatch.setenv("GARMIN_TOKENS", '{"di_token": "y"}')
+    gmod.GarminAdapter(tmp_path / "missing-dir", Store(":memory:"), today=dt.date(2026, 10, 26)).g
+    assert seen == ['{"di_token": "x"}', '{"di_token": "y"}']
     monkeypatch.delenv("GARMIN_TOKENS")
     with pytest.raises(RuntimeError, match="No Garmin login"):
         gmod.GarminAdapter(tmp_path / "missing-dir", Store(":memory:"), today=dt.date(2026, 10, 26)).g
